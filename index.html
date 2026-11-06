@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>easydash</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --track: #cde2fb;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --wash: rgba(11, 11, 11, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #f0efec;
+    --ink2: #c3c2b7;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --track: #0d366b;
+    --wash: rgba(255, 255, 255, 0.06);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+h1 { margin: 0; font-size: 22px; font-weight: 600; }
+h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.meta { color: var(--ink2); }
+.status { display: inline-flex; align-items: center; gap: 6px; color: var(--ink2); margin-left: auto; }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--status, var(--warning)); }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.tile .label { color: var(--ink2); }
+.tile .value { font-size: 28px; font-weight: 600; margin: 4px 0 2px; }
+.tile .sub { color: var(--muted); font-size: 12px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.chart { position: relative; }
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; }
+.chart-head .when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0; color: var(--ink2); font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.key { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }
+canvas { display: block; width: 100%; height: 180px; cursor: crosshair; }
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  display: none;
+}
+.tooltip .t { color: var(--muted); margin-bottom: 4px; }
+.tooltip .row { display: flex; align-items: center; gap: 6px; }
+.tooltip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tooltip .row span:last-child { color: var(--ink2); }
+table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--grid); }
+th { color: var(--muted); font-weight: 400; font-size: 12px; border-top: none; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.meter { width: 120px; height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.meter i { display: block; height: 100%; border-radius: 4px; }
+.mb { margin-bottom: 12px; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.card-head .hint { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+tbody.pick tr { cursor: pointer; }
+tbody.pick tr:hover td, tbody.pick tr.sel td { background: var(--wash); }
+tbody.pick tr.sel td:first-child { font-weight: 600; }
+td.cmd { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink2); }
+th button { all: unset; cursor: pointer; }
+th button.on { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="host">easydash</h1>
+  <span class="meta" id="meta"></span>
+  <span class="status" id="status">connecting</span>
+</header>
+
+<div class="tiles" id="tiles"></div>
+<div class="charts" id="charts"></div>
+
+<div class="charts">
+  <section class="card">
+    <div class="card-head"><h2>Interfaces</h2><span class="hint" id="nics-hint"></span></div>
+    <table>
+      <thead><tr><th>Interface</th><th class="num">In</th><th class="num">Out</th></tr></thead>
+      <tbody class="pick" id="nics"></tbody>
+    </table>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Disks</h2><span class="hint" id="disks-hint"></span></div>
+    <table>
+      <thead><tr><th>Disk</th><th class="num">Read</th><th class="num">Write</th><th>Utilization</th></tr></thead>
+      <tbody class="pick" id="disks"></tbody>
+    </table>
+  </section>
+</div>
+
+<section class="card mb">
+  <h2>Filesystems</h2>
+  <table>
+    <thead><tr><th>Mount</th><th>Device</th><th class="num">Size</th><th class="num">Used</th><th class="num">Available</th><th>Use</th></tr></thead>
+    <tbody id="fs"></tbody>
+  </table>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Processes</h2><span class="hint" id="procs-hint"></span></div>
+  <table>
+    <thead><tr>
+      <th class="num">PID</th><th>User</th>
+      <th class="num"><button data-sort="cpu">CPU</button></th>
+      <th class="num"><button data-sort="rss">Memory</button></th>
+      <th class="num">Mem</th><th>Command</th>
+    </tr></thead>
+    <tbody id="procs"></tbody>
+  </table>
+</section>
+
+<script>
+const COLORS = ["--s1", "--s2", "--s3", "--s4"];
+const UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+
+const fmtPct = v => v.toFixed(v < 10 ? 1 : 0) + "%";
+const fmtNum = v => v.toFixed(2);
+function fmtBytes(v) {
+  let u = 0;
+  while (Math.abs(v) >= 1024 && u < UNITS.length - 1) { v /= 1024; u++; }
+  return (u === 0 || v >= 10 ? v.toFixed(0) : v.toFixed(1)) + " " + UNITS[u];
+}
+const fmtRate = v => fmtBytes(v) + "/s";
+function fmtDuration(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+const fmtTime = t => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
+
+function niceStep(raw) {
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  return [1, 2, 5, 10].find(m => m * mag >= raw) * mag;
+}
+function yTicks(max, kind) {
+  if (kind === "pct") return { top: 100, ticks: [0, 25, 50, 75, 100], label: v => v + "%" };
+  let scale = 1, unit = "";
+  if (kind === "bytes" || kind === "rate") {
+    let u = 0;
+    while (max / scale >= 1024 && u < UNITS.length - 1) { scale *= 1024; u++; }
+    unit = " " + UNITS[u] + (kind === "rate" ? "/s" : "");
+  }
+  const m = Math.max(max / scale, kind === "num" ? 1 : 1e-9);
+  const step = niceStep(m / 4);
+  const top = Math.ceil(m / step) * step;
+  const ticks = [];
+  for (let v = 0; v <= top + step / 2; v += step) ticks.push(v * scale);
+  const digits = step < 1 ? Math.ceil(-Math.log10(step)) : 0;
+  return { top: top * scale, ticks, label: v => (v / scale).toFixed(digits) + unit };
+}
+
+const CHARTS = [
+  { title: "CPU", kind: "pct", fmt: fmtPct, series: [["cpu_user", "user"], ["cpu_system", "system"], ["cpu_iowait", "iowait"], ["cpu_steal", "steal"]] },
+  { title: "Memory", kind: "bytes", fmt: fmtBytes, min: s => s.latest.mem_total, series: [["mem_used", "used"], ["mem_cache", "buff/cache"], ["swap_used", "swap"]] },
+  { title: "Load average", kind: "num", fmt: fmtNum, series: [["load1", "1m"], ["load5", "5m"], ["load15", "15m"]] },
+  { title: "Network", pick: "nics", kind: "rate", fmt: fmtRate, series: [["net_rx", "in"], ["net_tx", "out"]] },
+  { title: "Disk I/O", pick: "disks", kind: "rate", fmt: fmtRate, series: [["disk_read", "read"], ["disk_write", "write"]] },
+];
+
+let state = null;
+let hoverIndex = null;
+let hoverT = null;
+let procSort = "cpu";
+const sk = (ch, key) => ch.sel ? key + ":" + ch.sel : key;
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+for (const ch of CHARTS) {
+  const card = el("section", "card chart");
+  const head = el("div", "chart-head");
+  ch.h2 = el("h2", null, ch.title);
+  head.append(ch.h2);
+  ch.when = el("span", "when");
+  head.append(ch.when);
+  ch.legend = el("div", "legend");
+  ch.values = ch.series.map(([, label], i) => {
+    const item = el("span");
+    const key = el("i", "key");
+    key.style.background = `var(${COLORS[i]})`;
+    const b = el("b", null, "–");
+    item.append(key, label, b);
+    ch.legend.append(item);
+    return b;
+  });
+  ch.canvas = el("canvas");
+  ch.tooltip = el("div", "tooltip");
+  card.append(head, ch.legend, ch.canvas, ch.tooltip);
+  document.getElementById("charts").append(card);
+
+  ch.canvas.addEventListener("pointermove", e => {
+    if (!state || !ch.geom) return;
+    const t = state.series.t || [];
+    const x = e.offsetX;
+    let best = 0;
+    for (let i = 0; i < t.length; i++) {
+      if (Math.abs(ch.geom.x(t[i]) - x) < Math.abs(ch.geom.x(t[best]) - x)) best = i;
+    }
+    hoverIndex = t.length ? best : null;
+    hoverT = t.length ? t[best] : null;
+    ch.hovered = true;
+    render();
+  });
+  ch.canvas.addEventListener("pointerleave", () => {
+    hoverIndex = hoverT = null;
+    ch.hovered = false;
+    render();
+  });
+}
+
+function drawChart(ch) {
+  const c = ch.canvas;
+  const dpr = window.devicePixelRatio || 1;
+  const W = c.clientWidth, H = c.clientHeight;
+  c.width = W * dpr; c.height = H * dpr;
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
+
+  const t = state.series.t || [];
+  if (t.length < 2) {
+    ctx.fillStyle = css("--muted");
+    ctx.fillText("waiting for data…", 8, H / 2);
+    ch.geom = null;
+    return;
+  }
+
+  let max = ch.min ? ch.min(state) || 0 : 0;
+  for (const [key] of ch.series) for (const v of state.series[sk(ch, key)]) max = Math.max(max, v);
+  const yt = yTicks(max, ch.kind);
+
+  const left = 64, right = 12, top = 8, bottom = 22;
+  const t0 = t[0], t1 = t[t.length - 1];
+  const x = v => left + (v - t0) / (t1 - t0) * (W - left - right);
+  const y = v => top + (1 - v / yt.top) * (H - top - bottom);
+  ch.geom = { x };
+
+  ctx.lineWidth = 1;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (const v of yt.ticks) {
+    const yy = Math.round(y(v)) + 0.5;
+    ctx.strokeStyle = v === 0 ? css("--axis") : css("--grid");
+    ctx.beginPath(); ctx.moveTo(left, yy); ctx.lineTo(W - right, yy); ctx.stroke();
+    ctx.fillStyle = css("--muted");
+    ctx.fillText(yt.label(v), left - 8, yy);
+  }
+
+  const span = t1 - t0;
+  const step = [10, 15, 30, 60, 120, 300, 600, 900, 1800].find(s => span / s <= 5) || 1800;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let v = Math.ceil(t0 / step) * step; v <= t1; v += step) {
+    const w = ctx.measureText(fmtTime(v)).width / 2;
+    if (x(v) - w < left || x(v) + w > W) continue;
+    ctx.fillText(fmtTime(v), x(v), H - bottom + 6);
+  }
+
+  const gap = state.interval * 3;
+  const surface = css("--surface");
+  ch.series.forEach(([key], i) => {
+    const vals = state.series[sk(ch, key)];
+    ctx.strokeStyle = css(COLORS[i]);
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let j = 0; j < t.length; j++) {
+      if (j === 0 || t[j] - t[j - 1] > gap) ctx.moveTo(x(t[j]), y(vals[j]));
+      else ctx.lineTo(x(t[j]), y(vals[j]));
+    }
+    ctx.stroke();
+  });
+
+  const idx = hoverIndex ?? t.length - 1;
+  if (hoverIndex !== null) {
+    ctx.strokeStyle = css("--muted");
+    ctx.lineWidth = 1;
+    const xx = Math.round(x(t[idx])) + 0.5;
+    ctx.beginPath(); ctx.moveTo(xx, top); ctx.lineTo(xx, H - bottom); ctx.stroke();
+  }
+  ch.series.forEach(([key], i) => {
+    ctx.beginPath();
+    ctx.arc(x(t[idx]), y(state.series[sk(ch, key)][idx]), 4, 0, Math.PI * 2);
+    ctx.fillStyle = css(COLORS[i]);
+    ctx.strokeStyle = surface;
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+  });
+}
+
+function updateTooltip(ch) {
+  const tip = ch.tooltip;
+  const t = state.series.t || [];
+  if (!ch.hovered || hoverIndex === null || !ch.geom) { tip.style.display = "none"; return; }
+  tip.replaceChildren(el("div", "t", fmtTime(t[hoverIndex])));
+  ch.series.forEach(([key, label], i) => {
+    const row = el("div", "row");
+    const k = el("i", "key");
+    k.style.background = `var(${COLORS[i]})`;
+    row.append(k, el("b", null, ch.fmt(state.series[sk(ch, key)][hoverIndex])), el("span", null, label));
+    tip.append(row);
+  });
+  tip.style.display = "block";
+  const px = ch.canvas.offsetLeft + ch.geom.x(t[hoverIndex]);
+  const card = ch.canvas.parentElement;
+  const w = tip.offsetWidth;
+  tip.style.left = (px + 12 + w > card.clientWidth ? px - 12 - w : px + 12) + "px";
+  tip.style.top = (ch.canvas.offsetTop + 8) + "px";
+}
+
+function renderTiles() {
+  const s = state.series, n = (s.t || []).length;
+  const last = key => n ? s[key][n - 1] : null;
+  const memTotal = state.latest.mem_total;
+  const cpu = n ? last("cpu_user") + last("cpu_system") + last("cpu_iowait") + last("cpu_steal") : null;
+  const tiles = [
+    ["CPU busy", cpu === null ? "–" : fmtPct(cpu), n ? `user ${fmtPct(last("cpu_user"))} · system ${fmtPct(last("cpu_system"))}` : ""],
+    ["Memory used", n && memTotal ? fmtPct(last("mem_used") / memTotal * 100) : "–", n && memTotal ? `${fmtBytes(last("mem_used"))} of ${fmtBytes(memTotal)}` : ""],
+    ["Load 1m", n ? fmtNum(last("load1")) : "–", state.info.cpus ? `${state.info.cpus} CPUs` : ""],
+    ["Network in", n ? fmtRate(last("net_rx")) : "–", n ? `out ${fmtRate(last("net_tx"))}` : ""],
+    ["Disk read", n ? fmtRate(last("disk_read")) : "–", n ? `write ${fmtRate(last("disk_write"))}` : ""],
+  ];
+  const box = document.getElementById("tiles");
+  box.replaceChildren(...tiles.map(([label, value, sub]) => {
+    const tile = el("div", "card tile");
+    tile.append(el("div", "label", label), el("div", "value", value), el("div", "sub", sub));
+    return tile;
+  }));
+}
+
+function renderFs() {
+  const rows = (state.latest.fs || []).map(f => {
+    const tr = el("tr");
+    tr.append(el("td", null, f.mount), el("td", null, f.device),
+      el("td", "num", fmtBytes(f.size)), el("td", "num", fmtBytes(f.used)), el("td", "num", fmtBytes(f.avail)));
+    tr.append(meterCell(f.pct, f.pct >= 90 ? "var(--critical)" : f.pct >= 80 ? "var(--warning)" : "var(--s1)"));
+    return tr;
+  });
+  document.getElementById("fs").replaceChildren(...rows);
+}
+
+function meterCell(pct, color) {
+  const td = el("td");
+  const meter = el("span", "meter");
+  const fill = el("i");
+  fill.style.width = Math.min(pct, 100) + "%";
+  fill.style.background = color;
+  meter.append(fill);
+  td.append(meter, fmtPct(pct));
+  return td;
+}
+
+function renderPick(ch, cells) {
+  const names = state.latest[ch.pick] || [];
+  const rows = names.map(name => {
+    const tr = el("tr");
+    if (ch.sel === name) tr.className = "sel";
+    tr.append(el("td", null, name), ...cells(name));
+    tr.addEventListener("click", () => {
+      ch.sel = ch.sel === name ? null : name;
+      render();
+    });
+    return tr;
+  });
+  document.getElementById(ch.pick).replaceChildren(...rows);
+  const t = state.series.t || [];
+  document.getElementById(ch.pick + "-hint").textContent =
+    hoverIndex !== null ? fmtTime(t[hoverIndex]) : names.length > 1 ? "click a row to plot it" : "";
+}
+
+function renderDevices(idx) {
+  const val = key => state.series[key]?.[idx];
+  const num = (key, fmt) => el("td", "num", val(key) === undefined ? "–" : fmt(val(key)));
+  renderPick(CHARTS.find(c => c.pick === "nics"), name => [
+    num("net_rx:" + name, fmtRate), num("net_tx:" + name, fmtRate),
+  ]);
+  renderPick(CHARTS.find(c => c.pick === "disks"), name => [
+    num("disk_read:" + name, fmtRate), num("disk_write:" + name, fmtRate),
+    meterCell(val("disk_util:" + name) ?? 0, "var(--s1)"),
+  ]);
+}
+
+function renderProcs() {
+  const by = procSort === "cpu" ? (a, b) => b.cpu - a.cpu || b.rss - a.rss : (a, b) => b.rss - a.rss;
+  const procs = [...(state.latest.procs || [])].sort(by).slice(0, 15);
+  document.getElementById("procs").replaceChildren(...procs.map(p => {
+    const tr = el("tr");
+    const cmd = el("td", "cmd", p.command);
+    cmd.title = p.command;
+    tr.append(el("td", "num", p.pid), el("td", null, p.user), el("td", "num", fmtPct(p.cpu)),
+      el("td", "num", fmtBytes(p.rss)), el("td", "num", fmtPct(p.mem)), cmd);
+    return tr;
+  }));
+  document.getElementById("procs-hint").textContent = state.latest.proc_count
+    ? `${state.latest.proc_count} total · CPU is % of one core` : "";
+  for (const b of document.querySelectorAll("th button")) b.classList.toggle("on", b.dataset.sort === procSort);
+}
+
+for (const b of document.querySelectorAll("th button")) {
+  b.addEventListener("click", () => {
+    procSort = b.dataset.sort;
+    if (state) renderProcs();
+  });
+}
+
+function render() {
+  if (!state) return;
+  const t = state.series.t || [];
+  const idx = hoverIndex ?? t.length - 1;
+  for (const ch of CHARTS) {
+    if (ch.sel && !state.series[sk(ch, ch.series[0][0])]) ch.sel = null;
+    if (ch.h2) ch.h2.textContent = ch.title + (ch.sel ? " · " + ch.sel : "");
+    drawChart(ch);
+    ch.when.textContent = hoverIndex !== null ? fmtTime(t[idx]) : "";
+    ch.series.forEach(([key], i) => {
+      ch.values[i].textContent = t.length ? ch.fmt(state.series[sk(ch, key)][idx]) : "–";
+    });
+    updateTooltip(ch);
+  }
+  renderDevices(idx);
+}
+
+function setStatus(text, color) {
+  const s = document.getElementById("status");
+  s.textContent = text;
+  s.style.setProperty("--status", color);
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/state");
+    state = await r.json();
+    const i = state.info;
+    document.getElementById("host").textContent = i.hostname || state.host;
+    document.title = (i.hostname || state.host) + " · easydash";
+    document.getElementById("meta").textContent = [
+      i.kernel,
+      i.cpus && `${i.cpus} CPUs`,
+      state.latest.uptime && `up ${fmtDuration(state.latest.uptime)}`,
+    ].filter(Boolean).join(" · ");
+    setStatus(state.status, state.status === "connected" ? "var(--good)" : "var(--warning)");
+    const t = state.series.t || [];
+    hoverIndex = hoverT === null ? null : t.indexOf(hoverT);
+    if (hoverIndex < 0) hoverIndex = hoverT = null;
+    renderTiles();
+    renderFs();
+    renderProcs();
+    render();
+  } catch (e) {
+    setStatus("dashboard server unavailable", "var(--critical)");
+  }
+  setTimeout(poll, (state?.interval || 2) * 1000);
+}
+
+window.addEventListener("resize", render);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+poll();
+</script>
+</body>
+</html>
